@@ -979,6 +979,7 @@ window.Chart = function (context) {
             rotateLabels: "smart",   // smart <=> 0 degre if space enough; otherwise 45 degres if space enough otherwise90 degre; 
             // you can force an integer value between 0 and 180 degres
             logarithmic: false, // can be 'fuzzy',true and false ('fuzzy' => if the gap between min and maximum is big it's using a logarithmic y-Axis scale
+			dateScale: false, // if true the xAxis scale is a year scale, so 2008,2012,2013,2014 don't have the same space
             scaleTickSizeLeft: 5,
             scaleTickSizeRight: 5,
             scaleTickSizeBottom: 5,
@@ -2485,7 +2486,7 @@ window.Chart = function (context) {
     } ;
 
     var Line = function (data, config, ctx) {
-   
+
         var maxSize, scaleHop, calculatedScale, labelHeight, scaleHeight, valueBounds, labelTemplateString, valueHop, widestXLabel, xAxisLength, yAxisPosX, xAxisPosY, rotateLabels = 0, msr;
         var annotateCnt = 0;
 
@@ -2523,6 +2524,105 @@ window.Chart = function (context) {
 
         valueBounds = getValueBounds();
 
+		// dateScale
+		if (config.dateScale) {
+			// YYYY in DD.MM.YYYY || MM.YYYY in DD.MM.YYYY
+			for (var i = 0; i < data.labels.length; i++) {
+				if (data.labels[i].toString().match(/^((0?[1-9])|10|11|12)\.(1|2)[0-9]{3}$/)) {
+					data.labels[i] = '01.'+data.labels[i];
+				}
+			}
+
+			for (var i = 0; i < data.labels.length; i++) {
+			if (data.labels[i].toString().match(/^(1|2)[0-9]{3}$/)) {
+					data.labels[i] = '01.01.'+data.labels[i];
+				}
+			}
+
+			// Test if all labels are dates
+			for (var i = 0; i < data.labels.length; i++) {
+				myDate=data.labels[i].toString().split(".");
+				var test_timestamp = new Date(myDate[1]+"/"+myDate[0]+"/"+myDate[2]).getTime();
+				if (isNaN(test_timestamp)) {
+					// dateScale not possible
+					config.dateScale = false;
+					break;
+				}
+			}
+
+
+			
+			if (config.dateScale) {
+				// difference max_date and min_date
+				myDate=data.labels[0].split(".");
+				var min_timestamp = new Date(myDate[1]+"/"+myDate[0]+"/"+myDate[2]).getTime();
+				myDate=data.labels[data.labels.length-1].split(".");
+				var max_timestamp = new Date(myDate[1]+"/"+myDate[0]+"/"+myDate[2]).getTime();
+
+				var max_dif = max_timestamp-min_timestamp;
+				
+				
+				var count_years = Math.floor(max_dif/31540000000); // millisec per year
+				
+				var dis_years;
+				// if all labels have the same year
+				if (count_years == 0) {
+					dis_years = 0;		
+				}
+				
+				if (count_years >= 1) {
+					dis_years = 1;		
+				}
+				if (count_years >= 10) {
+					dis_years = 2;		
+				}
+				if (count_years >= 50) {
+					dis_years = 10;		
+				}
+				if (count_years >= 100) {
+					dis_years = 20;		
+				}
+				if (count_years >= 500) {
+					dis_years = 100;		
+				}
+				if (count_years >= 1000) {
+					dis_years = 200;		
+				}
+				
+				data.xAxisLabels = [];	
+				if (dis_years >= 1) {
+					// add all years to xAxisLabels which can be divided by dis_years
+					for (var i = parseInt(data.labels[0].toString().split(".")[2]);
+						 i <= parseInt(data.labels[data.labels.length-1].toString().split(".")[2]); i++) {
+						if (i%dis_years == 0) {
+							data.xAxisLabels.push(i.toString());
+						}
+					}
+					// new min_timestamps and max_timestamps are possible
+					min_timestamp = new Date("01/01/"+data.labels[0].toString().split(".")[2]).getTime();
+					max_timestamp = new Date("01/01/"+data.labels[data.labels.length-1].toString().split(".")[2]).getTime();
+				} else {
+					for (var i = parseInt(data.labels[0].toString().split(".")[1]);
+						 i <= parseInt(data.labels[data.labels.length-1].toString().split(".")[1])+1; i++) {
+						data.xAxisLabels.push(i.toString()+'.'+data.labels[0].toString().split(".")[2]);
+					}	
+					
+					// new min_timestamps and max_timestamps are possible
+					myDate = data.xAxisLabels[0].split(".");
+					min_timestamp = new Date(myDate[0]+"/01/"+myDate[1]).getTime();
+					myDate = data.xAxisLabels[data.xAxisLabels.length-1].split(".");
+					max_timestamp = new Date(myDate[0]+"/01/"+myDate[1]).getTime();
+				}
+				// calculate the new difference between max and min timestamp
+				max_dif = max_timestamp-min_timestamp;
+			}
+		}
+		
+		// xAxisLabels are the normal data.labels if there is no dateScale
+		if (!config.dateScale) {
+			data.xAxisLabels = data.labels;
+		}
+		
         // true or fuzzy (error for negativ values (included 0))
         if (config.logarithmic !== false) {
             if (valueBounds.minValue <= 0) {
@@ -2578,13 +2678,15 @@ window.Chart = function (context) {
         animationLoop(config, drawScale, drawLines, ctx, msr.clrx, msr.clry, msr.clrwidth, msr.clrheight, yAxisPosX + msr.availableWidth / 2, xAxisPosY - msr.availableHeight / 2, yAxisPosX, xAxisPosY, data);
         
         function drawLines(animPc) {
-        	drawLinesDataset(animPc,data,config,ctx,
+        	drawLinesDataset(animPc,data,config,ctx,msr,
 							 {xAxisPosY:xAxisPosY,yAxisPosX:yAxisPosX,valueHop:valueHop,scaleHop:scaleHop,
-							  zeroY:zeroY,calculatedScale:calculatedScale,annotateCnt:annotateCnt});
+							  zeroY:zeroY,calculatedScale:calculatedScale,annotateCnt:annotateCnt,
+							  min_timestamp: min_timestamp,max_timestamp:max_timestamp, max_dif: max_dif
+							 });
         } ;
 
         function drawScale() {
-
+			
             //X axis line                                                          
 
             ctx.lineWidth = config.scaleLineWidth;
@@ -2593,22 +2695,32 @@ window.Chart = function (context) {
             ctx.moveTo(yAxisPosX - config.scaleTickSizeLeft, xAxisPosY);
             ctx.lineTo(yAxisPosX + msr.availableWidth + config.scaleTickSizeRight, xAxisPosY);
 
-            ctx.stroke();
-
-            for (var i = 0; i < data.labels.length; i++) {
-                ctx.beginPath();
-                ctx.moveTo(yAxisPosX + i * valueHop, xAxisPosY + config.scaleTickSizeBottom);
+            ctx.stroke();			
+			
+            for (var i = 0; i < data.xAxisLabels.length; i++) {
+				// different xPosition if it's a date scale
+				if (config.dateScale) {
+					var myDate=  data.xAxisLabels[i].split(".");
+					if (myDate.length == 1) { // only year
+						var timestamp = new Date("01/01/"+myDate[0]).getTime();
+						var xPosition = yAxisPosX+((timestamp-min_timestamp)/max_dif)*msr.availableWidth;
+					} else { // myDate.length == 2 (month.year)
+						var timestamp = new Date(myDate[0]+"/01/"+myDate[1]).getTime();
+						var xPosition = yAxisPosX+((timestamp-min_timestamp)/max_dif)*msr.availableWidth;
+					}
+				} else { // no dateScale
+					var xPosition = yAxisPosX + i * valueHop;	
+				}
+					
+				
+                ctx.beginPath();				
+                ctx.moveTo(xPosition, xAxisPosY + config.scaleTickSizeBottom);
                 ctx.lineWidth = config.scaleGridLineWidth;
                 ctx.strokeStyle = config.scaleGridLineColor;
 
-                //Check i isnt 0, so we dont go over the Y axis twice.
-
-                if (config.scaleShowGridLines && i > 0 && i % config.scaleXGridLinesStep==0 ) {
-                    ctx.lineTo(yAxisPosX + i * valueHop, xAxisPosY - msr.availableHeight - config.scaleTickSizeTop);
-                }
-                else {
-                    ctx.lineTo(yAxisPosX + i * valueHop, xAxisPosY);
-                }
+				ctx.lineTo(xPosition, xAxisPosY - msr.availableHeight - config.scaleTickSizeTop);
+								
+				
                 ctx.stroke();
             }
 
@@ -2637,6 +2749,8 @@ window.Chart = function (context) {
         } ;
 
         function drawLabels() {
+
+			
             ctx.font = config.scaleFontStyle + " " + config.scaleFontSize + "px " + config.scaleFontFamily;
 
             //X Labels     
@@ -2655,17 +2769,29 @@ window.Chart = function (context) {
             
               }
               ctx.fillStyle = config.scaleFontColor;
-
+			  
               if(config.xAxisBottom){
-                for (var i = 0; i < data.labels.length; i++) {
+                for (var i = 0; i < data.xAxisLabels.length; i++) {
+				 	if (config.dateScale) {
+						var myDate=  data.xAxisLabels[i].split(".");
+						if (myDate.length == 1) {
+							var timestamp = new Date("01/01/"+myDate[0]).getTime();
+							var xPosition = yAxisPosX+((timestamp-min_timestamp)/max_dif)*msr.availableWidth;
+						} else { // myDate.length == 2
+							var timestamp = new Date(myDate[0]+"/01/"+myDate[1]).getTime();
+							var xPosition = yAxisPosX+((timestamp-min_timestamp)/max_dif)*msr.availableWidth;
+						}
+					} else {
+						var xPosition = yAxisPosX + i * valueHop;	
+					}	
                   ctx.save();
                   if (msr.rotateLabels > 0) {
-                    ctx.translate(yAxisPosX + i * valueHop - config.scaleFontSize/2, msr.xLabelPos);
+                    ctx.translate(xPosition - config.scaleFontSize/2, msr.xLabelPos);
                     ctx.rotate(-(msr.rotateLabels * (Math.PI / 180)));
-                    ctx.fillText(fmtChartJS(config,data.labels[i],config.fmtXLabel), 0, 0);
+                    ctx.fillText(fmtChartJS(config,data.xAxisLabels[i],config.fmtXLabel), 0, 0);
                   }
                   else {
-                    ctx.fillText(fmtChartJS(config,data.labels[i],config.fmtXLabel), yAxisPosX + i * valueHop, msr.xLabelPos);
+                    ctx.fillText(fmtChartJS(config,data.xAxisLabels[i],config.fmtXLabel), xPosition, msr.xLabelPos);
                   }
                 ctx.restore();
                 }
@@ -3519,7 +3645,7 @@ window.Chart = function (context) {
 					var lineData = {datasets:[],labels:data.labels};
 					lineData.datasets.push(data.datasets[i]);
 					lineConfig = mergeChartConfig(config, {datasetFill: data.datasets[i].fill})
-				   	drawLinesDataset(animPc,lineData,lineConfig,ctx,
+				   	drawLinesDataset(animPc,lineData,lineConfig,ctx,msr,
 									 {xAxisPosY:xAxisPosY,
 									  yAxisPosX:yAxisPosX + config.barValueSpacing+ 
 									  (barWidth + config.barDatasetSpacing/2 + config.barStrokeWidth)*nrOfBars/2,
@@ -5021,7 +5147,7 @@ window.Chart = function (context) {
     } ;
 
 	// Function for additionalLine (BarLine|Line)
-	function drawLinesDataset(animPc,data,config,ctx,vars) {
+	function drawLinesDataset(animPc,data,config,ctx,msr,vars) {
 		var xAxisPosY = vars.xAxisPosY;
 		var yAxisPosX = vars.yAxisPosX;
 		var valueHop = vars.valueHop;
@@ -5029,6 +5155,9 @@ window.Chart = function (context) {
 		var zeroY = vars.zeroY;
 		var calculatedScale = vars.calculatedScale;
 		var annotateCnt = vars.annotateCnt;
+		var min_timestamp = vars.min_timestamp;
+		var max_timestamp = vars.max_timestamp;
+		var max_dif = vars.max_dif;
 		
 	 	var totvalue = new Array();
 		var maxvalue = new Array();
@@ -5111,7 +5240,7 @@ window.Chart = function (context) {
 			}
 			ctx.stroke();
 			if (config.datasetFill) {
-				ctx.lineTo(yAxisPosX + (valueHop * (data.datasets[i].data.length - 1)), xAxisPosY - zeroY);
+				ctx.lineTo(xPos(data.datasets[i].data.length - 1), xAxisPosY - zeroY);
 				ctx.lineTo(xPos(frstpt), xAxisPosY - zeroY);
 				ctx.lineTo(xPos(frstpt), yPos(i, frstpt));
 				ctx.closePath();
@@ -5125,28 +5254,61 @@ window.Chart = function (context) {
 				ctx.closePath();
 			}
 			if (config.pointDot) {
-				if (typeof data.datasets[i].pointColor == "function")ctx.fillStyle = data.datasets[i].pointColor("POINTCOLOR",data,config,i,-1,animPc,-1);
-				else ctx.fillStyle = data.datasets[i].pointColor;
-				if (typeof data.datasets[i].pointStrokeColor == "function")ctx.strokeStyle = data.datasets[i].pointStrokeColor("POINTSTROKECOLOR",data,config,i,-1,animPc,-1);
-				else ctx.strokeStyle = data.datasets[i].pointStrokeColor;
-
-				ctx.lineWidth = config.pointDotStrokeWidth;
-				for (var k = 0; k < data.datasets[i].data.length; k++) {
-					if (!(typeof(data.datasets[i].data[k])=='undefined')) { 
-					  ctx.beginPath();
-					  ctx.arc(yAxisPosX + (valueHop * k), xAxisPosY - animPc * (calculateOffset(config, data.datasets[i].data[k], calculatedScale, scaleHop)), config.pointDotRadius, 0, Math.PI * 2, true);
-					  ctx.fill();
-					  ctx.stroke();
-					}
-				}
-			}
+                    if (typeof data.datasets[i].pointColor == "function")ctx.fillStyle = data.datasets[i].pointColor("POINTCOLOR",data,config,i,-1,animPc,-1);
+                    else ctx.fillStyle = data.datasets[i].pointColor;
+                    if (typeof data.datasets[i].pointStrokeColor == "function")ctx.strokeStyle = data.datasets[i].pointStrokeColor("POINTSTROKECOLOR",data,config,i,-1,animPc,-1);
+                    else ctx.strokeStyle = data.datasets[i].pointStrokeColor;
+                    
+                    ctx.lineWidth = config.pointDotStrokeWidth;
+                    for (var k = 0; k < data.datasets[i].data.length; k++) {
+                        if (!(typeof(data.datasets[i].data[k])=='undefined')) { 
+                          ctx.beginPath();
+                          ctx.arc(xPos(k), xAxisPosY - animPc * (calculateOffset(config, data.datasets[i].data[k], calculatedScale, scaleHop)), config.pointDotRadius, 0, Math.PI * 2, true);
+                          ctx.fill();
+                          ctx.stroke();
+                        }
+                    }
+                }
 		};
 
 		function yPos(dataSet, iteration) {
 			return xAxisPosY - animPc * (calculateOffset(config, data.datasets[dataSet].data[iteration], calculatedScale, scaleHop));
 		};
-		function xPos(iteration) {
-			return yAxisPosX + (valueHop * iteration);
+		 function xPos(iteration) {	
+			if (config.dateScale) {
+				// iteration == -0.5 => first value (bezier-curve)
+				if (iteration != -0.5) {
+					if (Math.round(iteration) != iteration) { // bezier-curve
+						var myDate=data.labels[iteration+0.5].split(".");				
+						var timestamp = new Date(myDate[1]+"/"+myDate[0]+"/"+myDate[2]).getTime();
+						var myDate=data.labels[iteration-0.5].split(".");				
+						var l_timestamp = new Date(myDate[1]+"/"+myDate[0]+"/"+myDate[2]).getTime();
+						var middle_time = l_timestamp+(timestamp - l_timestamp)/2;
+						
+						return yAxisPosX+((middle_time-min_timestamp)/max_dif)*msr.availableWidth;
+					}
+					else {
+						var myDate=data.labels[iteration].split(".");				
+						var timestamp = new Date(myDate[1]+"/"+myDate[0]+"/"+myDate[2]).getTime();
+
+						return  yAxisPosX+((timestamp-min_timestamp)/max_dif)*msr.availableWidth;
+					}
+
+				}
+
+				// iteration == -0.5 => first value
+				if (iteration == -0.5) {
+					var myDate=data.labels[0].split(".");				
+					var timestamp = new Date(myDate[1]+"/"+myDate[0]+"/"+myDate[2]).getTime();
+					var myDate=data.labels[iteration+1.5].split(".");				
+					var l_timestamp = new Date(myDate[1]+"/"+myDate[0]+"/"+myDate[2]).getTime();
+					var middle_time = l_timestamp+(timestamp - l_timestamp)/2;
+					
+					return  yAxisPosX+((middle_time-min_timestamp)/max_dif)*msr.availableWidth;					
+				}
+			}else {
+				return yAxisPosX + (valueHop * iteration);
+			}
 		};
 	}
 

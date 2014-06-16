@@ -2513,6 +2513,13 @@ window.Chart = function (context) {
    
         var maxSize, scaleHop, calculatedScale, labelHeight, scaleHeight, valueBounds, labelTemplateString, valueHop, widestXLabel, xAxisLength, yAxisPosX, xAxisPosY, rotateLabels = 0, msr;
         var annotateCnt = 0;
+		// important for doubleYAxis
+		var dataY1 = {},dataY2 = {};
+			dataY1.labels = data.labels;
+			dataY2.labels = data.labels;
+			// delete datasets
+			dataY1.datasets = [];
+			dataY2.datasets = [];
 
 
 
@@ -2525,7 +2532,17 @@ window.Chart = function (context) {
 
         // adapt data when length is 1;
         var mxlgt=0;
-        for (var i = 0; i < data.datasets.length; i++) mxlgt=Max([mxlgt,data.datasets[i].data.length]);
+		config.doubleYAxis = false;
+        for (var i = 0; i < data.datasets.length; i++) {
+			mxlgt=Max([mxlgt,data.datasets[i].data.length]);
+			// check if two yAxis scales are needed (add a config option)
+			if (data.datasets[i].axis == 2) {
+				dataY2.datasets.push(data.datasets[i]);
+				config.doubleYAxis = true;
+			} else { // 1
+				dataY1.datasets.push(data.datasets[i]);
+			}
+		}
         if(mxlgt==1)
         {
             if(typeof(data.labels[0])=="string")data.labels=["",data.labels[0],""];
@@ -2534,7 +2551,6 @@ window.Chart = function (context) {
               if(typeof(data.datasets[i].data[0]!="undefined"))data.datasets[i].data=[undefined,data.datasets[i].data[0],undefined];
             }
         }
-        
 
         if (!dynamicFunction(data,config,ctx,"Line"))return;
 
@@ -2565,7 +2581,14 @@ window.Chart = function (context) {
         labelTemplateString = (config.scaleShowLabels) ? config.scaleLabel : "";
 
         if (!config.scaleOverride) {
-            calculatedScale = calculateScale(config, valueBounds.maxSteps, valueBounds.minSteps, valueBounds.maxValue, valueBounds.minValue, labelTemplateString);
+			if (config.doubleYAxis) {
+				calculatedScales = {};
+				calculatedScales.Y1 = calculateScale(config, valueBounds.maxSteps, valueBounds.minSteps, valueBounds.maxValue.Y1, valueBounds.minValue.Y1, labelTemplateString);
+				calculatedScales.Y2 = calculateScale(config, valueBounds.maxSteps, valueBounds.minSteps, valueBounds.maxValue.Y2, valueBounds.minValue.Y2, labelTemplateString);
+				calculatedScale = calculatedScales.Y1; // important for xAxis
+			} else {
+            	calculatedScale = calculateScale(config, valueBounds.maxSteps, valueBounds.minSteps, valueBounds.maxValue, valueBounds.minValue, labelTemplateString);
+			}
             msr = setMeasures(data, config, ctx, height, width, calculatedScale.labels, false, false, true, true,config.datasetFill);
         }
         else {
@@ -2588,30 +2611,61 @@ window.Chart = function (context) {
 			msr.availableHeight -= inGraphDataHeight;
 		}
 		
-        scaleHop = Math.floor(msr.availableHeight / calculatedScale.steps);
-        valueHop = Math.floor(msr.availableWidth / (data.labels.length - 1));
+		if (config.doubleYAxis) {
+			scaleHop = {Y1:Math.floor(msr.availableHeight / calculatedScales.Y1.steps),Y2:Math.floor(msr.availableHeight / calculatedScales.Y2.steps)};
+		} else {
+			scaleHop = Math.floor(msr.availableHeight / calculatedScale.steps);
+		}
+
+
+
+		valueHop = Math.floor(msr.availableWidth / (data.labels.length - 1));
         if(valueHop ==0)valueHop = (msr.availableWidth / (data.labels.length - 1));
 
         msr.clrwidth=msr.clrwidth-(msr.availableWidth-(data.labels.length - 1) * valueHop);
         msr.availableWidth = (data.labels.length - 1) * valueHop;
-        msr.availableHeight = (calculatedScale.steps) * scaleHop;
-
+		if (config.doubleYAxis) {
+			msr.availableHeight = Max([(calculatedScales.Y1.steps) * scaleHop.Y1,(calculatedScales.Y2.steps) * scaleHop.Y2]);
+		} else {
+        	msr.availableHeight = (calculatedScale.steps) * scaleHop;
+		}
         yAxisPosX = msr.leftNotUsableSize + config.scaleTickSizeLeft;
         xAxisPosY = msr.topNotUsableSize + msr.availableHeight + inGraphDataHeight + config.scaleTickSizeTop;
 
         drawLabels();
-        var zeroY = 0;
-        if (valueBounds.minValue < 0) {
-            var zeroY = calculateOffset(config, 0, calculatedScale, scaleHop);
-        }
-
+		if (config.doubleYAxis) {
+			var zeroY = {Y1:0,Y2:0};
+			if (valueBounds.minValue.Y1 < 0) {
+				zeroY.Y1 = calculateOffset(config, 0, calculatedScales.Y1, scaleHop.Y1);
+			}
+			if (valueBounds.minValue.Y2 < 0) {
+				zeroY.Y2 = calculateOffset(config, 0, calculatedScales.Y2, scaleHop.Y2);
+			}
+		} else {
+			var zeroY = 0;
+			if (valueBounds.minValue < 0) {
+				zeroY = calculateOffset(config, 0, calculatedScale, scaleHop);
+			}
+		}
 
         animationLoop(config, drawScale, drawLines, ctx, msr.clrx, msr.clry, msr.clrwidth, msr.clrheight, yAxisPosX + msr.availableWidth / 2, xAxisPosY - msr.availableHeight / 2, yAxisPosX, xAxisPosY, data);
         
         function drawLines(animPc) {
-        	drawLinesDataset(animPc,data,config,ctx,
-							 {xAxisPosY:xAxisPosY,yAxisPosX:yAxisPosX,valueHop:valueHop,scaleHop:scaleHop,
-							  zeroY:zeroY,calculatedScale:calculatedScale,annotateCnt:annotateCnt});
+			if (config.doubleYAxis) {
+				var retDrawLinesDataset = drawLinesDataset(animPc,dataY1,config,ctx,
+								 {xAxisPosY:xAxisPosY,yAxisPosX:yAxisPosX,valueHop:valueHop,scaleHop:scaleHop.Y1,
+								  zeroY:zeroY.Y1,calculatedScale:calculatedScales.Y1,annotateCnt:annotateCnt});
+				annotateCnt = retDrawLinesDataset.annotateCnt;
+				retDrawLinesDataset = drawLinesDataset(animPc,dataY2,config,ctx,
+								 {xAxisPosY:xAxisPosY,yAxisPosX:yAxisPosX,valueHop:valueHop,scaleHop:scaleHop.Y2,
+								  zeroY:zeroY.Y2,calculatedScale:calculatedScales.Y2,annotateCnt:annotateCnt});
+				annotateCnt = retDrawLinesDataset.annotateCnt;
+			} else {
+				var retDrawLinesDataset = drawLinesDataset(animPc,data,config,ctx,
+								 {xAxisPosY:xAxisPosY,yAxisPosX:yAxisPosX,valueHop:valueHop,scaleHop:scaleHop,
+								  zeroY:zeroY,calculatedScale:calculatedScale,annotateCnt:annotateCnt});
+				annotateCnt = retDrawLinesDataset.annotateCnt;
+			}
         } ;
 
         function drawScale() {
@@ -2708,40 +2762,77 @@ window.Chart = function (context) {
             ctx.textAlign = "right";
             ctx.textBaseline = "middle";
 
-            for (var j = ((config.showYAxisMin) ? -1 : 0) ; j < calculatedScale.steps; j++) {
-                if (config.scaleShowLabels) {
-                    if (config.yAxisLeft) {
-                        ctx.textAlign = "right";
-                        ctx.fillText(calculatedScale.labels[j + 1], yAxisPosX - (config.scaleTickSizeLeft + config.yAxisSpaceRight), xAxisPosY - ((j + 1) * scaleHop));
-                    }
-                    if (config.yAxisRight) {
-                        ctx.textAlign = "left";
-                        ctx.fillText(calculatedScale.labels[j + 1], yAxisPosX + msr.availableWidth + (config.scaleTickSizeRight + config.yAxisSpaceRight), xAxisPosY - ((j + 1) * scaleHop));
-                    }
-                }
-            }
+			if (config.doubleYAxis) {
+
+				if (config.scaleShowLabels) {
+					if (config.yAxisLeft) {
+						ctx.textAlign = "right";
+						for (var j = ((config.showYAxisMin) ? -1 : 0) ; j < calculatedScales.Y1.steps; j++) {
+							ctx.fillText(calculatedScales.Y1.labels[j + 1], yAxisPosX - (config.scaleTickSizeLeft + config.yAxisSpaceRight), xAxisPosY - ((j + 1) * scaleHop.Y1));
+						}
+					}
+					if (config.yAxisRight) {
+						ctx.textAlign = "left";
+						for (var j = ((config.showYAxisMin) ? -1 : 0) ; j < calculatedScales.Y2.steps; j++) {
+							ctx.fillText(calculatedScales.Y2.labels[j + 1], yAxisPosX + msr.availableWidth + (config.scaleTickSizeRight + config.yAxisSpaceRight), xAxisPosY - ((j + 1) * scaleHop.Y2));
+						}
+					}
+				}
+
+			} else {
+				for (var j = ((config.showYAxisMin) ? -1 : 0) ; j < calculatedScale.steps; j++) {
+					if (config.scaleShowLabels) {
+						if (config.yAxisLeft) {
+							ctx.textAlign = "right";
+							ctx.fillText(calculatedScale.labels[j + 1], yAxisPosX - (config.scaleTickSizeLeft + config.yAxisSpaceRight), xAxisPosY - ((j + 1) * scaleHop));
+						}
+						if (config.yAxisRight) {
+							ctx.textAlign = "left";
+							ctx.fillText(calculatedScale.labels[j + 1], yAxisPosX + msr.availableWidth + (config.scaleTickSizeRight + config.yAxisSpaceRight), xAxisPosY - ((j + 1) * scaleHop));
+						}
+					}
+				}
+			}
         } ;
 
         function getValueBounds() {
-            var upperValue = Number.MIN_VALUE;
-            var lowerValue = Number.MAX_VALUE;
-            for (var i = 0; i < data.datasets.length; i++) {
-                for (var j = 0; j < data.datasets[i].data.length; j++) {
-                    if (1*data.datasets[i].data[j] > upperValue) { upperValue = 1*data.datasets[i].data[j] };
-                    if (1*data.datasets[i].data[j] < lowerValue) { lowerValue = 1*data.datasets[i].data[j] };
-                }
-            };
+			var upperValue = Number.MIN_VALUE;
+			var lowerValue = Number.MAX_VALUE;
+            if (!config.doubleYAxis) {
+				for (var i = 0; i < data.datasets.length; i++) {
+					for (var j = 0; j < data.datasets[i].data.length; j++) {
+						if (1*data.datasets[i].data[j] > upperValue) { upperValue = 1*data.datasets[i].data[j] };
+						if (1*data.datasets[i].data[j] < lowerValue) { lowerValue = 1*data.datasets[i].data[j] };
+					}
+				};
 
-			if (Math.abs(upperValue - lowerValue)<0.00000001) {
-				upperValue = Max([upperValue*2,1]);
-				lowerValue = 0;
+				if (Math.abs(upperValue - lowerValue)<0.00000001) {
+					upperValue = Max([upperValue*2,1]);
+					lowerValue = 0;
+				}
+			} else { // doubleYAxis
+				var upperValue_Y1 = upperValue;
+				var lowerValue_Y1 = lowerValue;
+				var upperValue_Y2 = upperValue;
+				var lowerValue_Y2 = lowerValue;
+
+				for (var i=0; i<data.datasets.length; i++){
+					for (var j=0; j<data.datasets[i].data.length; j++){
+						if (data.datasets[i].axis != 2) {
+							if ( data.datasets[i].data[j] > upperValue_Y1) { upperValue_Y1 = data.datasets[i].data[j] };
+							if ( data.datasets[i].data[j] < lowerValue_Y1) { lowerValue_Y1 = data.datasets[i].data[j] };
+						} else {
+							if ( data.datasets[i].data[j] > upperValue_Y2) { upperValue_Y2 = data.datasets[i].data[j] };
+							if ( data.datasets[i].data[j] < lowerValue_Y2) { lowerValue_Y2 = data.datasets[i].data[j] };
+						}
+					}
+				};
 			}
-
             // AJOUT CHANGEMENT
             if (!isNaN(config.graphMin)) lowerValue = config.graphMin;
             if (!isNaN(config.graphMax)) upperValue = config.graphMax;
 
-      			labelHeight = config.scaleFontSize;
+      		labelHeight = config.scaleFontSize;
             scaleHeight = msr.availableHeight;
 
 //scaleHeight+" "+labelHeight);
@@ -2749,12 +2840,21 @@ window.Chart = function (context) {
             var maxSteps = Math.floor((scaleHeight / (labelHeight * 0.66)));
             var minSteps = Math.floor((scaleHeight / labelHeight * 0.5));
 
-            return {
-                maxValue: upperValue,
-                minValue: lowerValue,
-                maxSteps: maxSteps,
-                minSteps: minSteps
-            };
+			if (!config.doubleYAxis) {
+				return {
+					maxValue: upperValue,
+					minValue: lowerValue,
+					maxSteps: maxSteps,
+					minSteps: minSteps
+				};
+			} else { // doubleYAxis
+				return {
+					maxValue: {Y1: upperValue_Y1,Y2: upperValue_Y2},
+					minValue: {Y1: lowerValue_Y1,Y2: lowerValue_Y2},
+					maxSteps: maxSteps,
+					minSteps: minSteps
+				}
+			}
         };
     } ;
 
@@ -3513,7 +3613,7 @@ window.Chart = function (context) {
 		}
 		
         scaleHop = Math.floor(msr.availableHeight / calculatedScale.steps);
-		console.log(scaleHop);
+
         valueHop = Math.floor(msr.availableWidth / (data.labels.length));
         if(valueHop ==0)valueHop = (msr.availableWidth / (data.labels.length - 1));
 
@@ -3561,12 +3661,13 @@ window.Chart = function (context) {
 					var lineData = {datasets:[],labels:data.labels};
 					lineData.datasets.push(data.datasets[i]);
 					lineConfig = mergeChartConfig(config, {datasetFill: data.datasets[i].fill})
-				   	drawLinesDataset(animPc,lineData,lineConfig,ctx,
+				   	var retDrawLinesDataset = drawLinesDataset(animPc,lineData,lineConfig,ctx,
 									 {xAxisPosY:xAxisPosY,
 									  yAxisPosX:yAxisPosX + config.barValueSpacing+ 
 									  (barWidth + config.barDatasetSpacing/2 + config.barStrokeWidth)*nrOfBars/2,
 									  valueHop:valueHop,scaleHop:scaleHop,
 									  zeroY:zeroY,calculatedScale:calculatedScale,annotateCnt:annotateCnt});
+					annotateCnt = retDrawLinesDataset.annotateCnt;
 					continue; // next dataset
 				}
       
@@ -5184,6 +5285,9 @@ window.Chart = function (context) {
 				}
 			}
 		};
+		return {
+				annotateCnt: annotateCnt
+		}
 
 		function yPos(dataSet, iteration) {
 			return xAxisPosY - animPc * (calculateOffset(config, data.datasets[dataSet].data[iteration], calculatedScale, scaleHop));

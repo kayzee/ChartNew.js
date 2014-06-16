@@ -1,0 +1,42 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+  <head>
+  <meta http-equiv="content-type" content="text/html; charset=windows-1250">
+  <meta name="generator" content="PSPad editor, www.pspad.com">
+  <title></title>
+  <!--[if lte IE 8]><SCRIPT src='source/excanvas.js'></script><![endif]--><SCRIPT src='../ChartNew.js'></script>
+  </head>
+  <body>
+  <canvas id="mycanvas" height="600" width="1000"></canvas>
+  <script>
+var lineChartData = {
+            labels : ["January","February","March","April","May","June","July"],
+            datasets : [
+                {
+                    fillColor : "rgba(220,220,220,0.5)",
+                    strokeColor : "rgba(220,220,220,1)",
+                    pointColor : "rgba(220,220,220,1)",
+                    pointStrokeColor : "#fff",
+                    axis : 1,
+                    data : [15,25,90,81,56,55,400]
+                },
+                {
+                    fillColor : "rgba(151,187,205,0.5)",
+                    strokeColor : "rgba(151,187,205,1)",
+                    pointColor : "rgba(151,187,205,1)",
+                    pointStrokeColor : "#fff",
+                    axis : 2,
+                    data : [105,48,40,19,96,27,100]
+                }
+            ]
+        }
+
+  var opts= {animation:false, annotateDisplay: true,yAxisRight: true, inGraphDataShow:true};
+
+  window.onload = function() {
+    var myBar = new Chart(document.getElementById("mycanvas").getContext("2d")).Line(lineChartData,opts);
+    }
+    </script>
+
+  </body>
+</html>

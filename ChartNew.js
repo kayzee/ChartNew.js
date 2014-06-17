@@ -998,6 +998,8 @@ window.Chart = function (context) {
             scaleShowGridLines: true,
             scaleXGridLinesStep : 1,
             scaleYGridLinesStep : 1,
+			dblScaleShowGridLines: {Y1: true,Y2: false},
+			dblScaleYGridLinesStep: {Y1: 1,Y2: 1},
             scaleGridLineColor: "rgba(0,0,0,.05)",
             scaleGridLineWidth: 1,
             showYAxisMin: true,      // Show the minimum value on Y axis (in original version, this minimum is not displayed - it can overlap the X labels)
@@ -2585,11 +2587,17 @@ window.Chart = function (context) {
 				calculatedScales = {};
 				calculatedScales.Y1 = calculateScale(config, valueBounds.maxSteps, valueBounds.minSteps, valueBounds.maxValue.Y1, valueBounds.minValue.Y1, labelTemplateString);
 				calculatedScales.Y2 = calculateScale(config, valueBounds.maxSteps, valueBounds.minSteps, valueBounds.maxValue.Y2, valueBounds.minValue.Y2, labelTemplateString);
-				calculatedScale = calculatedScales.Y1; // important for xAxis
+				msrs = {Y1:setMeasures(data, config, ctx, height, width, calculatedScales.Y1.labels, false, false, true, true,config.datasetFill),
+					   Y2: setMeasures(data, config, ctx, height, width, calculatedScales.Y2.labels, false, false, true, true,config.datasetFill)};
+				if (msrs.Y1.availableWidth < msrs.Y2.availableWidth) {
+					msr = msrs.Y1;
+				} else {
+					msr = msrs.Y2;
+				}
 			} else {
             	calculatedScale = calculateScale(config, valueBounds.maxSteps, valueBounds.minSteps, valueBounds.maxValue, valueBounds.minValue, labelTemplateString);
+				msr = setMeasures(data, config, ctx, height, width, calculatedScale.labels, false, false, true, true,config.datasetFill);
 			}
-            msr = setMeasures(data, config, ctx, height, width, calculatedScale.labels, false, false, true, true,config.datasetFill);
         }
         else {
             calculatedScale = {
@@ -2706,19 +2714,37 @@ window.Chart = function (context) {
             ctx.lineTo(yAxisPosX, xAxisPosY - msr.availableHeight - config.scaleTickSizeTop);
             ctx.stroke();
 
-            for (var j = 0 ; j < calculatedScale.steps; j++) {
-               ctx.beginPath();
-               ctx.moveTo(yAxisPosX - config.scaleTickSizeLeft, xAxisPosY - ((j + 1) * scaleHop));
-               ctx.lineWidth = config.scaleGridLineWidth;
-               ctx.strokeStyle = config.scaleGridLineColor;
-               if (config.scaleShowGridLines && j % config.scaleYGridLinesStep==0 ) {
-                   ctx.lineTo(yAxisPosX + msr.availableWidth + config.scaleTickSizeRight, xAxisPosY - ((j + 1) * scaleHop));
-               }
-               else {
-                   ctx.lineTo(yAxisPosX, xAxisPosY - ((j + 1) * scaleHop));
-               }
-               ctx.stroke();
-            }
+			if(config.doubleYAxis) {
+				for (var s = 1 ; s <= 2; s++) {
+					for (var j = 0 ; j < eval("calculatedScales.Y"+s+".steps"); j++) {
+					   ctx.beginPath();
+					   ctx.moveTo(yAxisPosX - config.scaleTickSizeLeft, xAxisPosY - ((j + 1) * eval("scaleHop.Y"+s)));
+					   ctx.lineWidth = config.scaleGridLineWidth;
+					   ctx.strokeStyle = config.scaleGridLineColor;
+					   if (eval("config.dblScaleShowGridLines.Y"+s) && j % eval("config.dblScaleYGridLinesStep.Y"+s)==0 ) {
+						   ctx.lineTo(yAxisPosX + msr.availableWidth + config.scaleTickSizeRight, xAxisPosY - ((j + 1) * eval("scaleHop.Y"+s)));
+					   }
+					   else {
+						   ctx.lineTo(yAxisPosX, xAxisPosY - ((j + 1) * eval("scaleHop.Y"+s)));
+					   }
+					   ctx.stroke();
+					}
+				}
+			} else {
+				for (var j = 0 ; j < calculatedScale.steps; j++) {
+				   ctx.beginPath();
+				   ctx.moveTo(yAxisPosX - config.scaleTickSizeLeft, xAxisPosY - ((j + 1) * scaleHop));
+				   ctx.lineWidth = config.scaleGridLineWidth;
+				   ctx.strokeStyle = config.scaleGridLineColor;
+				   if (config.scaleShowGridLines && j % config.scaleYGridLinesStep==0 ) {
+					   ctx.lineTo(yAxisPosX + msr.availableWidth + config.scaleTickSizeRight, xAxisPosY - ((j + 1) * scaleHop));
+				   }
+				   else {
+					   ctx.lineTo(yAxisPosX, xAxisPosY - ((j + 1) * scaleHop));
+				   }
+				   ctx.stroke();
+				}
+			}
         } ;
 
         function drawLabels() {

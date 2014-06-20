@@ -21,7 +21,7 @@
 			drawMathDeviation: "stddev",
 			deviationStrokeColor: "#000",
 			deviationWidth: 5,
-			data :  ["60","70","75","65",,"80","0"],
+			data :  [60,70,75,65,,80,0],
       title : "bar 1"
 		},
 		{
@@ -37,7 +37,7 @@
 	]
 }
 
- var opts= {inGraphDataShow:true, inGraphDataTmpl: '<%=meanDif(2)%>', bezierCurve: false, savePng: false, legend: true
+ var opts= {inGraphDataShow:true, inGraphDataTmpl: '<%=median(2)%>', bezierCurve: false, savePng: false, legend: true
 			};
 
   window.onload = function() {
